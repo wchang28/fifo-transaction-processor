@@ -145,7 +145,7 @@ class Queue extends events.EventEmitter implements IQueue {
 // 4. executing-transaction (transaction: ITransaction)
 // 5. transaction-success (transaction: ITransaction, result: any)
 // 6. transaction-error (transaction: ITransaction, err: any)
-export class SequentialTransactionProcessor extends events.EventEmitter implements ITransactionProcessor {
+export class FIFOTransactionProcessor extends events.EventEmitter implements ITransactionProcessor {
     private _executingTransaction: boolean;
     private _queue: IQueue;
     private _options: Options;

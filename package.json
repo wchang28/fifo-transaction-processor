@@ -1,0 +1,29 @@
+{
+  "name": "fifo-transaction-processor",
+  "version": "1.0.0",
+  "description": "FIFO Transaction Processor",
+  "main": "./js/index.js",
+  "typings": "./js/index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wchang28/fifo-transaction-processor.git"
+  },
+  "keywords": [
+    "FIFO",
+    "transaction"
+  ],
+  "author": "Wen Chang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wchang28/fifo-transaction-processor/issues"
+  },
+  "homepage": "https://github.com/wchang28/fifo-transaction-processor#readme",
+  "dependencies": {
+    "@types/lodash": "^4.14.68",
+    "@types/node": "^8.0.7",
+    "lodash": "^4.17.4"
+  }
+}
