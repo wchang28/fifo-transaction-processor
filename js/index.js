@@ -193,7 +193,7 @@ var FIFOTransactionProcessor = (function (_super) {
         var item = null;
         if (!this.Busy && (item = this._queue.dequeue())) {
             this.setBusy(true);
-            this.emit("executing-transaction", item);
+            this.emit("executing-transaction", item.Transaction);
             item.Transaction.execute()
                 .then(function (result) {
                 _this.handleTransactionSuccess(item.Transaction, item.CompletionCallback, result);

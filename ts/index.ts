@@ -219,7 +219,7 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
         let item: ITransactionQueueItem = null;
         if (!this.Busy && (item = this._queue.dequeue())) {
             this.setBusy(true);
-            this.emit("executing-transaction", item);
+            this.emit("executing-transaction", item.Transaction);
             item.Transaction.execute()
             .then((result: any) => {
                 this.handleTransactionSuccess(item.Transaction, item.CompletionCallback, result);
