@@ -217,7 +217,7 @@ var FIFOTransactionProcessor = (function (_super) {
                         resolve(result);
                 } : null);
                 if (!Wait)
-                    resolve({});
+                    resolve(null);
             }
             else {
                 var err = { error: "forbidden", error_description: "transaction is not allowed at this time" };

@@ -39,7 +39,7 @@ let defaultOptions: Options = {
 export type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 
 export interface ITransactionProcessor {
-    submit: (Transaction: ITransaction, Wait?: boolean) => Promise<any>;
+    submit: <T>(Transaction: ITransaction, Wait?: boolean) => Promise<T>;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
@@ -231,16 +231,16 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
         }
     }
     // submit a transaction to be executed
-    submit(Transaction: ITransaction, Wait: boolean = true) : Promise<any> {
-        return new Promise<any>((resolve: (value: any) => void, reject: (err: any) => void) => {
+    submit<T>(Transaction: ITransaction, Wait: boolean = true) : Promise<T> {
+        return new Promise<T>((resolve: (value: T) => void, reject: (err: any) => void) => {
             if (this.Open) {    // queue is open
-                this._queue.enqueue(Transaction, Wait ? (err: any, result: any) => {
+                this._queue.enqueue(Transaction, Wait ? (err: any, result: T) => {
                     if (err)
                         reject(err);
                     else
                         resolve(result);
                 } : null);
-                if (!Wait) resolve({});
+                if (!Wait) resolve(null);
             } else {    // queue is close
                 let err: any = {error: "forbidden", error_description: "transaction is not allowed at this time"};
                 this.handleTransactionError(Transaction, null, err);

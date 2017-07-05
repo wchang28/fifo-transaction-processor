@@ -21,7 +21,7 @@ export interface ITransactionProcessorJSON {
 }
 export declare type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 export interface ITransactionProcessor {
-    submit: (Transaction: ITransaction, Wait?: boolean) => Promise<any>;
+    submit: <T>(Transaction: ITransaction, Wait?: boolean) => Promise<T>;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
@@ -47,7 +47,7 @@ export declare class FIFOTransactionProcessor extends events.EventEmitter implem
     private setBusy(value);
     Open: boolean;
     private executeTransactionIfNecessary();
-    submit(Transaction: ITransaction, Wait?: boolean): Promise<any>;
+    submit<T>(Transaction: ITransaction, Wait?: boolean): Promise<T>;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
     toJSON(): ITransactionProcessorJSON;
