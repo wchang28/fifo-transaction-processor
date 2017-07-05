@@ -39,7 +39,7 @@ let defaultOptions: Options = {
 export type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 
 export interface ITransactionProcessor {
-    submit: (Transaction: ITransaction, Wait?: boolean) => void;
+    submit: (Transaction: ITransaction, Wait?: boolean) => Promise<any>;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
