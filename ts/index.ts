@@ -5,13 +5,13 @@ export type TransactionCompletionCallback = (err: any, result: any) => void;
 
 export interface ITransaction {
     execute: () => Promise<any>;
-    readonly CompletionCallback?: TransactionCompletionCallback;
     toJSON: () => any;
 }
 
 interface ITransactionQueueItem {
     EnqueueTime: number;
     Transaction: ITransaction;
+    CompletionCallback?: TransactionCompletionCallback;
 }
 
 export interface ITransactionQueueItemJSON {
@@ -39,7 +39,7 @@ let defaultOptions: Options = {
 export type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 
 export interface ITransactionProcessor {
-    submit: (Transaction: ITransaction) => void;
+    submit: (Transaction: ITransaction, Wait?: boolean) => void;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
@@ -53,8 +53,8 @@ export interface ITransactionProcessor {
 type QueueEvents = "enqueue" | "change" | "transactions-timeout" | "transactions-flushed";
 
 interface IQueue {
-    enqueue: (Transaction: ITransaction) => void;
-    dequeue: () => ITransaction;
+    enqueue: (Transaction: ITransaction, CompletionCallback?: TransactionCompletionCallback) => void;
+    dequeue: () => ITransactionQueueItem;
     removeTimeoutTransactions: (TransTimeoutMS: number) => void;
     flush: () => void;
     readonly Count: number;
@@ -65,8 +65,8 @@ interface IQueue {
 // this class emits the following events
 // 1. enqueue (itemJSON: ITransactionQueueItemJSON)
 // 2. change ()
-// 3. transactions-timeout (timeoutTransactions: ITransaction[])
-// 4. transactions-flushed (flushedTransactions: ITransaction[])
+// 3. transactions-timeout (timeoutItems: ITransactionQueueItem[])
+// 4. transactions-flushed (flushedItems: ITransactionQueueItem[])
 class Queue extends events.EventEmitter implements IQueue {
     private _items: ITransactionQueueItem[];
     constructor() {
@@ -77,18 +77,18 @@ class Queue extends events.EventEmitter implements IQueue {
         return {EnqueueTime: item.EnqueueTime, Transaction: item.Transaction.toJSON()};
     }
     // enqueue a transaction
-    enqueue(Transaction: ITransaction) {
-        let item: ITransactionQueueItem = {EnqueueTime: new Date().getTime(), Transaction};
+    enqueue(Transaction: ITransaction, CompletionCallback?: TransactionCompletionCallback) {
+        let item: ITransactionQueueItem = {EnqueueTime: new Date().getTime(), Transaction, CompletionCallback};
         this._items.push(item);
         this.emit("enqueue", this.itemToJSON(item));
         this.emit("change");
     }
     // dequeue a transaction
-    dequeue() : ITransaction {
+    dequeue() : ITransactionQueueItem {
         if (this._items.length > 0) {
             let item = this._items.shift();
             this.emit("change");
-            return item.Transaction;
+            return item;
         } else
             return null;
     }
@@ -103,13 +103,13 @@ class Queue extends events.EventEmitter implements IQueue {
                     indices.push(i);
             }
             if (indices.length > 0) {
-                let timeoutTransactions: ITransaction[] = [];
+                let timeoutItems: ITransactionQueueItem[] = [];
                 for (let i in indices) {
                     let index = indices[i];
-                    timeoutTransactions.push(this._items[index].Transaction);
+                    timeoutItems.push(this._items[index]);
                     this._items.splice(index, 1);
                 }
-                this.emit("transactions-timeout", timeoutTransactions);
+                this.emit("transactions-timeout", timeoutItems);
                 this.emit("change");
             }
         }
@@ -117,11 +117,9 @@ class Queue extends events.EventEmitter implements IQueue {
     // flush the queue
     flush() {
         if (this._items.length > 0) {
-            let flushedTransactions : ITransaction[] = [];
-            for (let i in this._items)
-                flushedTransactions.push(this._items[i].Transaction);
+            let flushedItems = this._items;
             this._items = [];
-            this.emit("transactions-flushed", flushedTransactions);
+            this.emit("transactions-flushed", flushedItems);
             this.emit("change");
         }
     }
@@ -171,25 +169,23 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
             this.executeTransactionIfNecessary();
         }).on("change", () => {
             this.emit("change");
-        }).on("transactions-timeout", (timeoutTransactions: ITransaction[]) => {
+        }).on("transactions-timeout", (timeoutItems: ITransactionQueueItem[]) => {
             let err = {error: "timeout", error_description: "transaction timeout"};
-            for (let i in timeoutTransactions)
-                this.handleTransactionError(timeoutTransactions[i], err);
-        }).on("transactions-flushed", (flushedTransactions: ITransaction[]) => {
+            for (let i in timeoutItems)
+                this.handleTransactionError(timeoutItems[i].Transaction, timeoutItems[i].CompletionCallback, err);
+        }).on("transactions-flushed", (flushedItems: ITransactionQueueItem[]) => {
             let err = {error: "aborted", error_description: "transaction aborted"};
-            for (let i in flushedTransactions)
-                this.handleTransactionError(flushedTransactions[i], err);
+            for (let i in flushedItems)
+                this.handleTransactionError(flushedItems[i].Transaction, flushedItems[i].CompletionCallback, err);
         });
         this._timer = setTimeout(this.PollingTimeoutFunction, this._options.TransTimeoutPollingIntervalMS);
     }
-    private handleTransactionError(Transaction: ITransaction, err: any) {
+    private handleTransactionError(Transaction: ITransaction, CompletionCallback: TransactionCompletionCallback, err: any) {
         this.emit("transaction-error", Transaction, err);
-        let CompletionCallback = Transaction.CompletionCallback;
         if (typeof CompletionCallback === "function") CompletionCallback(err, null);        
     }
-    private handleTransactionSuccess(Transaction: ITransaction, result: any) {
+    private handleTransactionSuccess(Transaction: ITransaction, CompletionCallback: TransactionCompletionCallback, result: any) {
         this.emit("transaction-success", Transaction, result);
-        let CompletionCallback = Transaction.CompletionCallback;
         if (typeof CompletionCallback === "function") CompletionCallback(null, result);
     }
     // abort all transactions currently in the queue
@@ -220,26 +216,37 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
         }
     }
     private executeTransactionIfNecessary() {
-        let Transaction: ITransaction = null;
-        if (!this.Busy && (Transaction = this._queue.dequeue())) {
+        let item: ITransactionQueueItem = null;
+        if (!this.Busy && (item = this._queue.dequeue())) {
             this.setBusy(true);
-            this.emit("executing-transaction", Transaction);
-            Transaction.execute()
+            this.emit("executing-transaction", item);
+            item.Transaction.execute()
             .then((result: any) => {
-                this.handleTransactionSuccess(Transaction, result);
+                this.handleTransactionSuccess(item.Transaction, item.CompletionCallback, result);
                 this.setBusy(false);
             }).catch((err: any) => {
-                this.handleTransactionError(Transaction, err);
+                this.handleTransactionError(item.Transaction, item.CompletionCallback, err);
                 this.setBusy(false);
             });
         }
     }
     // submit a transaction to be executed
-    submit(Transaction: ITransaction) {
-        if (this.Open) // queue is open
-            this._queue.enqueue(Transaction);
-        else  // queue is close
-            this.handleTransactionError(Transaction, {error: "forbidden", error_description: "transaction is not allowed at this time"});
+    submit(Transaction: ITransaction, Wait: boolean = true) : Promise<any> {
+        return new Promise<any>((resolve: (value: any) => void, reject: (err: any) => void) => {
+            if (this.Open) {    // queue is open
+                this._queue.enqueue(Transaction, Wait ? (err: any, result: any) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve(result);
+                } : null);
+                if (!Wait) resolve({});
+            } else {    // queue is close
+                let err: any = {error: "forbidden", error_description: "transaction is not allowed at this time"};
+                this.handleTransactionError(Transaction, null, err);
+                reject(err);
+            }
+        });
     }
     get Queue() : ITransactionQueueItemJSON[] {return this._queue.toJSON();}
     get Options() : Options {return _.assignIn({}, this._options);}

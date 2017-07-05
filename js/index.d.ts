@@ -3,7 +3,6 @@ import * as events from "events";
 export declare type TransactionCompletionCallback = (err: any, result: any) => void;
 export interface ITransaction {
     execute: () => Promise<any>;
-    readonly CompletionCallback?: TransactionCompletionCallback;
     toJSON: () => any;
 }
 export interface ITransactionQueueItemJSON {
@@ -22,7 +21,7 @@ export interface ITransactionProcessorJSON {
 }
 export declare type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 export interface ITransactionProcessor {
-    submit: (Transaction: ITransaction) => void;
+    submit: (Transaction: ITransaction, Wait?: boolean) => void;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
@@ -40,15 +39,15 @@ export declare class FIFOTransactionProcessor extends events.EventEmitter implem
     private _queueOpen;
     private readonly PollingTimeoutFunction;
     constructor(options?: Options);
-    private handleTransactionError(Transaction, err);
-    private handleTransactionSuccess(Transaction, result);
+    private handleTransactionError(Transaction, CompletionCallback, err);
+    private handleTransactionSuccess(Transaction, CompletionCallback, result);
     abortAll(): void;
     end(): void;
     readonly Busy: boolean;
     private setBusy(value);
     Open: boolean;
     private executeTransactionIfNecessary();
-    submit(Transaction: ITransaction): void;
+    submit(Transaction: ITransaction, Wait?: boolean): Promise<any>;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
     toJSON(): ITransactionProcessorJSON;

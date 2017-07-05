@@ -19,8 +19,8 @@ var defaultOptions = {
 // this class emits the following events
 // 1. enqueue (itemJSON: ITransactionQueueItemJSON)
 // 2. change ()
-// 3. transactions-timeout (timeoutTransactions: ITransaction[])
-// 4. transactions-flushed (flushedTransactions: ITransaction[])
+// 3. transactions-timeout (timeoutItems: ITransactionQueueItem[])
+// 4. transactions-flushed (flushedItems: ITransactionQueueItem[])
 var Queue = (function (_super) {
     __extends(Queue, _super);
     function Queue() {
@@ -32,8 +32,8 @@ var Queue = (function (_super) {
         return { EnqueueTime: item.EnqueueTime, Transaction: item.Transaction.toJSON() };
     };
     // enqueue a transaction
-    Queue.prototype.enqueue = function (Transaction) {
-        var item = { EnqueueTime: new Date().getTime(), Transaction: Transaction };
+    Queue.prototype.enqueue = function (Transaction, CompletionCallback) {
+        var item = { EnqueueTime: new Date().getTime(), Transaction: Transaction, CompletionCallback: CompletionCallback };
         this._items.push(item);
         this.emit("enqueue", this.itemToJSON(item));
         this.emit("change");
@@ -43,7 +43,7 @@ var Queue = (function (_super) {
         if (this._items.length > 0) {
             var item = this._items.shift();
             this.emit("change");
-            return item.Transaction;
+            return item;
         }
         else
             return null;
@@ -59,13 +59,13 @@ var Queue = (function (_super) {
                     indices.push(i);
             }
             if (indices.length > 0) {
-                var timeoutTransactions = [];
+                var timeoutItems = [];
                 for (var i in indices) {
                     var index = indices[i];
-                    timeoutTransactions.push(this._items[index].Transaction);
+                    timeoutItems.push(this._items[index]);
                     this._items.splice(index, 1);
                 }
-                this.emit("transactions-timeout", timeoutTransactions);
+                this.emit("transactions-timeout", timeoutItems);
                 this.emit("change");
             }
         }
@@ -73,11 +73,9 @@ var Queue = (function (_super) {
     // flush the queue
     Queue.prototype.flush = function () {
         if (this._items.length > 0) {
-            var flushedTransactions = [];
-            for (var i in this._items)
-                flushedTransactions.push(this._items[i].Transaction);
+            var flushedItems = this._items;
             this._items = [];
-            this.emit("transactions-flushed", flushedTransactions);
+            this.emit("transactions-flushed", flushedItems);
             this.emit("change");
         }
     };
@@ -120,14 +118,14 @@ var FIFOTransactionProcessor = (function (_super) {
             _this.executeTransactionIfNecessary();
         }).on("change", function () {
             _this.emit("change");
-        }).on("transactions-timeout", function (timeoutTransactions) {
+        }).on("transactions-timeout", function (timeoutItems) {
             var err = { error: "timeout", error_description: "transaction timeout" };
-            for (var i in timeoutTransactions)
-                _this.handleTransactionError(timeoutTransactions[i], err);
-        }).on("transactions-flushed", function (flushedTransactions) {
+            for (var i in timeoutItems)
+                _this.handleTransactionError(timeoutItems[i].Transaction, timeoutItems[i].CompletionCallback, err);
+        }).on("transactions-flushed", function (flushedItems) {
             var err = { error: "aborted", error_description: "transaction aborted" };
-            for (var i in flushedTransactions)
-                _this.handleTransactionError(flushedTransactions[i], err);
+            for (var i in flushedItems)
+                _this.handleTransactionError(flushedItems[i].Transaction, flushedItems[i].CompletionCallback, err);
         });
         _this._timer = setTimeout(_this.PollingTimeoutFunction, _this._options.TransTimeoutPollingIntervalMS);
         return _this;
@@ -145,15 +143,13 @@ var FIFOTransactionProcessor = (function (_super) {
         enumerable: true,
         configurable: true
     });
-    FIFOTransactionProcessor.prototype.handleTransactionError = function (Transaction, err) {
+    FIFOTransactionProcessor.prototype.handleTransactionError = function (Transaction, CompletionCallback, err) {
         this.emit("transaction-error", Transaction, err);
-        var CompletionCallback = Transaction.CompletionCallback;
         if (typeof CompletionCallback === "function")
             CompletionCallback(err, null);
     };
-    FIFOTransactionProcessor.prototype.handleTransactionSuccess = function (Transaction, result) {
+    FIFOTransactionProcessor.prototype.handleTransactionSuccess = function (Transaction, CompletionCallback, result) {
         this.emit("transaction-success", Transaction, result);
-        var CompletionCallback = Transaction.CompletionCallback;
         if (typeof CompletionCallback === "function")
             CompletionCallback(null, result);
     };
@@ -194,26 +190,41 @@ var FIFOTransactionProcessor = (function (_super) {
     });
     FIFOTransactionProcessor.prototype.executeTransactionIfNecessary = function () {
         var _this = this;
-        var Transaction = null;
-        if (!this.Busy && (Transaction = this._queue.dequeue())) {
+        var item = null;
+        if (!this.Busy && (item = this._queue.dequeue())) {
             this.setBusy(true);
-            this.emit("executing-transaction", Transaction);
-            Transaction.execute()
+            this.emit("executing-transaction", item);
+            item.Transaction.execute()
                 .then(function (result) {
-                _this.handleTransactionSuccess(Transaction, result);
+                _this.handleTransactionSuccess(item.Transaction, item.CompletionCallback, result);
                 _this.setBusy(false);
             }).catch(function (err) {
-                _this.handleTransactionError(Transaction, err);
+                _this.handleTransactionError(item.Transaction, item.CompletionCallback, err);
                 _this.setBusy(false);
             });
         }
     };
     // submit a transaction to be executed
-    FIFOTransactionProcessor.prototype.submit = function (Transaction) {
-        if (this.Open)
-            this._queue.enqueue(Transaction);
-        else
-            this.handleTransactionError(Transaction, { error: "forbidden", error_description: "transaction is not allowed at this time" });
+    FIFOTransactionProcessor.prototype.submit = function (Transaction, Wait) {
+        var _this = this;
+        if (Wait === void 0) { Wait = true; }
+        return new Promise(function (resolve, reject) {
+            if (_this.Open) {
+                _this._queue.enqueue(Transaction, Wait ? function (err, result) {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve(result);
+                } : null);
+                if (!Wait)
+                    resolve({});
+            }
+            else {
+                var err = { error: "forbidden", error_description: "transaction is not allowed at this time" };
+                _this.handleTransactionError(Transaction, null, err);
+                reject(err);
+            }
+        });
     };
     Object.defineProperty(FIFOTransactionProcessor.prototype, "Queue", {
         get: function () { return this._queue.toJSON(); },
