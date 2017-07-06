@@ -45,7 +45,7 @@ export interface ITransactionProcessor {
     readonly Busy: boolean;
     Open: boolean;
     readonly Queue: ITransactionQueueItemJSON[];
-    Options: Options;
+    readonly Options: Options;
     toJSON: () => ITransactionProcessorJSON;
     on: (event: ProcessorEvents, listener: Function) => this;
 }
