@@ -220,7 +220,7 @@ var FIFOTransactionProcessor = (function (_super) {
                     resolve(null);
             }
             else {
-                var err = { error: "forbidden", error_description: "transaction is not allowed at this time" };
+                var err = { error: "forbidden", error_description: "submitting transaction is not allowed at this time" };
                 _this.handleTransactionError(Transaction, null, err);
                 reject(err);
             }

@@ -1,6 +1,5 @@
 /// <reference types="node" />
 import * as events from "events";
-export declare type TransactionCompletionCallback = (err: any, result: any) => void;
 export interface ITransaction {
     execute: () => Promise<any>;
     toJSON: () => any;

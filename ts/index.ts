@@ -1,12 +1,12 @@
 import * as events from "events";
 import * as _ from "lodash";
 
-export type TransactionCompletionCallback = (err: any, result: any) => void;
-
 export interface ITransaction {
     execute: () => Promise<any>;
     toJSON: () => any;
 }
+
+type TransactionCompletionCallback = (err: any, result: any) => void;
 
 interface ITransactionQueueItem {
     EnqueueTime: number;
@@ -242,7 +242,7 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
                 } : null);
                 if (!Wait) resolve(null);
             } else {    // queue is close
-                let err: any = {error: "forbidden", error_description: "transaction is not allowed at this time"};
+                let err: any = {error: "forbidden", error_description: "submitting transaction is not allowed at this time"};
                 this.handleTransactionError(Transaction, null, err);
                 reject(err);
             }
