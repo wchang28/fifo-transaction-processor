@@ -4,7 +4,9 @@ export interface ITransaction {
     execute: () => Promise<any>;
     toJSON: () => any;
 }
+export declare type TransactionId = string;
 export interface ITransactionQueueItemJSON {
+    Id: TransactionId;
     EnqueueTime: number;
     Transaction: any;
 }
@@ -16,15 +18,19 @@ export interface ITransactionProcessorJSON {
     Options: Options;
     Busy: boolean;
     Open: boolean;
+    Stopped: boolean;
     QueueCount: number;
+    ExecutingTransacrion: ITransactionQueueItemJSON;
 }
 export declare type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
 export interface ITransactionProcessor {
-    submit: <T>(Transaction: ITransaction, Wait?: boolean) => Promise<T>;
+    submit: (Transaction: ITransaction) => Promise<TransactionId>;
+    transact: <T>(Transaction: ITransaction) => Promise<T>;
     abortAll: () => void;
     end: () => void;
     readonly Busy: boolean;
     Open: boolean;
+    Stopped: boolean;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
     toJSON: () => ITransactionProcessorJSON;
@@ -36,17 +42,22 @@ export declare class FIFOTransactionProcessor extends events.EventEmitter implem
     private _options;
     private _timer;
     private _queueOpen;
+    private _stopped;
     private readonly PollingTimeoutFunction;
     constructor(options?: Options);
-    private handleTransactionError(Transaction, CompletionCallback, err);
-    private handleTransactionSuccess(Transaction, CompletionCallback, result);
+    private handleTransactionError(Transaction, CompletionCallback, err, TransactionId);
+    private handleTransactionSuccess(Transaction, CompletionCallback, result, TransactionId);
     abortAll(): void;
     end(): void;
     readonly Busy: boolean;
-    private setBusy(value);
+    private setExecutingTransaction(value);
     Open: boolean;
+    Stopped: boolean;
     private executeTransactionIfNecessary();
-    submit<T>(Transaction: ITransaction, Wait?: boolean): Promise<T>;
+    private generateTransactionId();
+    private readonly QueueClosedError;
+    submit(Transaction: ITransaction): Promise<TransactionId>;
+    transact<T>(Transaction: ITransaction): Promise<T>;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
     toJSON(): ITransactionProcessorJSON;
