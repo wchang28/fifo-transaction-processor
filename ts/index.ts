@@ -248,9 +248,7 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
             });
         }
     }
-    private generateTransactionId() : TransactionId {
-        return uuid.v4().replace(/-/gi, "");
-    }
+    private generateTransactionId() : TransactionId {return uuid.v4().replace(/-/gi, "");}
     private get QueueClosedError() : any {return {error: "forbidden", error_description: "submitting transaction is not allowed at this time"};}
 
     // submit a transaction to be executed

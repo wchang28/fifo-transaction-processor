@@ -217,9 +217,7 @@ var FIFOTransactionProcessor = (function (_super) {
             });
         }
     };
-    FIFOTransactionProcessor.prototype.generateTransactionId = function () {
-        return uuid.v4().replace(/-/gi, "");
-    };
+    FIFOTransactionProcessor.prototype.generateTransactionId = function () { return uuid.v4().replace(/-/gi, ""); };
     Object.defineProperty(FIFOTransactionProcessor.prototype, "QueueClosedError", {
         get: function () { return { error: "forbidden", error_description: "submitting transaction is not allowed at this time" }; },
         enumerable: true,
