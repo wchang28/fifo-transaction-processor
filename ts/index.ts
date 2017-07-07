@@ -231,6 +231,8 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
         if (this._stopped !== value) {
             this._stopped = value;
             this.emit("change");
+            if (!this.Stopped)  // becoming not stopped
+                this.executeTransactionIfNecessary();
         }
     }
     private executeTransactionIfNecessary() {

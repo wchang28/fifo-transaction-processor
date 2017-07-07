@@ -196,6 +196,8 @@ var FIFOTransactionProcessor = (function (_super) {
             if (this._stopped !== value) {
                 this._stopped = value;
                 this.emit("change");
+                if (!this.Stopped)
+                    this.executeTransactionIfNecessary();
             }
         },
         enumerable: true,
