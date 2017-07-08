@@ -43,12 +43,11 @@ let defaultOptions: Options = {
     ,TransTimeoutMS: 15000
 };
 
-export type ProcessorEvents = "submitted" | "change" | "polling-transactions" | "executing-transaction" | "transaction-success" | "transaction-error";
-
 export interface ITransactionProcessor {
     submit: (Transaction: ITransaction) => Promise<TransactionId>;
     transact: <T>(Transaction: ITransaction) => Promise<T>;
     abortAll: () => void;
+    abort: (TransactionId: TransactionId) => boolean;
     end: () => void;
     readonly Busy: boolean;
     Open: boolean;
@@ -56,26 +55,30 @@ export interface ITransactionProcessor {
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
     toJSON: () => ITransactionProcessorJSON;
-    on: (event: ProcessorEvents, listener: Function) => this;
+    // events
+    on(event: "submitted", listener: (itemJSON: ITransactionQueueItemJSON) => void) : this;
+    on(event: "change", listener: () => void) : this;
+    on(event: "polling-transactions", listener: () => void) : this;
+    on(event: "executing-transaction", listener: (transaction: ITransaction, TransactionId: TransactionId) => void) : this;
+    on(event: "transaction-success", listener: (transaction: ITransaction, result: any, TransactionId: TransactionId) => void) : this;
+    on(event: "transaction-error", listener: (transaction: ITransaction, err: any, TransactionId?: TransactionId) => void) : this;
 }
-
-type QueueEvents = "enqueue" | "change" | "transactions-timeout" | "transactions-flushed";
 
 interface IQueue {
     enqueue: (TransactionId: TransactionId, Transaction: ITransaction, CompletionCallback?: TransactionCompletionCallback) => void;
     dequeue: () => ITransactionQueueItem;
     removeTimeoutTransactions: (TransTimeoutMS: number) => void;
     flush: () => void;
+    remove: (TransactionId: TransactionId) => boolean;
     readonly Count: number;
     toJSON: () => ITransactionQueueItemJSON[];
-    on: (event: QueueEvents, listener: Function) => this;
+    // events
+    on(event: "enqueue", listener: (itemJSON: ITransactionQueueItemJSON) => void) : this;
+    on(event: "change", listener: () => void) : this;
+    on(event: "transactions-timeout", listener: (timeoutItems: ITransactionQueueItem[]) => void) : this;
+    on(event: "transactions-removed", listener: (flushedItems: ITransactionQueueItem[]) => void) : this;
 }
 
-// this class emits the following events
-// 1. enqueue (itemJSON: ITransactionQueueItemJSON)
-// 2. change ()
-// 3. transactions-timeout (timeoutItems: ITransactionQueueItem[])
-// 4. transactions-flushed (flushedItems: ITransactionQueueItem[])
 class Queue extends events.EventEmitter implements IQueue {
     private _items: ITransactionQueueItem[];
     constructor() {
@@ -126,11 +129,26 @@ class Queue extends events.EventEmitter implements IQueue {
     // flush the queue
     flush() {
         if (this._items.length > 0) {
-            let flushedItems = this._items;
+            let removedItems = this._items;
             this._items = [];
-            this.emit("transactions-flushed", flushedItems);
+            this.emit("transactions-removed", removedItems);
             this.emit("change");
         }
+    }
+    // remove a transaction from the queue
+    remove(TransactionId: TransactionId) : boolean {
+        if (this._items.length > 0) {
+            for (let i in this._items) {
+                let item = this._items[i];
+                if (item.Id === TransactionId) {
+                    this._items.splice(parseInt(i), 1);
+                    this.emit("transactions-removed", [item]);
+                    this.emit("change");
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     get Count() : number {
         return this._items.length;
@@ -145,14 +163,7 @@ class Queue extends events.EventEmitter implements IQueue {
     }
 };
 
-// this class emits the following events
-// 1. submitted (itemJSON: ITransactionQueueItemJSON)
-// 2. change ()
-// 3. polling-transactions ()
-// 4. executing-transaction (transaction: ITransaction, TransactionId: TransactionId)
-// 5. transaction-success (transaction: ITransaction, result: any, TransactionId: TransactionId)
-// 6. transaction-error (transaction: ITransaction, err: any, TransactionId?: TransactionId)
-export class FIFOTransactionProcessor extends events.EventEmitter implements ITransactionProcessor {
+class FIFOTransactionProcessor extends events.EventEmitter implements ITransactionProcessor {
     private _executingTransaction: ITransactionQueueItemJSON;
     private _queue: IQueue;
     private _options: Options;
@@ -184,10 +195,10 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
             let err = {error: "timeout", error_description: "transaction timeout"};
             for (let i in timeoutItems)
                 this.handleTransactionError(timeoutItems[i].Transaction, timeoutItems[i].CompletionCallback, err, timeoutItems[i].Id);
-        }).on("transactions-flushed", (flushedItems: ITransactionQueueItem[]) => {
+        }).on("transactions-removed", (removedItems: ITransactionQueueItem[]) => {
             let err = {error: "aborted", error_description: "transaction aborted"};
-            for (let i in flushedItems)
-                this.handleTransactionError(flushedItems[i].Transaction, flushedItems[i].CompletionCallback, err, flushedItems[i].Id);
+            for (let i in removedItems)
+                this.handleTransactionError(removedItems[i].Transaction, removedItems[i].CompletionCallback, err, removedItems[i].Id);
         });
         this._timer = setTimeout(this.PollingTimeoutFunction, this._options.TransTimeoutPollingIntervalMS);
     }
@@ -201,6 +212,8 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
     }
     // abort all transactions currently in the queue
     abortAll() {this._queue.flush();}
+    // abort one transaction
+    abort(TransactionId: TransactionId) : boolean {return this._queue.remove(TransactionId);}
     // call this before removing this processor reference
     end() {
         this.Open = false;  // close the queue
@@ -295,3 +308,5 @@ export class FIFOTransactionProcessor extends events.EventEmitter implements ITr
         };
     }
 }
+
+export function get(options?: Options) : ITransactionProcessor {return new FIFOTransactionProcessor(options);}

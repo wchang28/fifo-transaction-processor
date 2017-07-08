@@ -17,11 +17,6 @@ var defaultOptions = {
     TransTimeoutPollingIntervalMS: 5000,
     TransTimeoutMS: 15000
 };
-// this class emits the following events
-// 1. enqueue (itemJSON: ITransactionQueueItemJSON)
-// 2. change ()
-// 3. transactions-timeout (timeoutItems: ITransactionQueueItem[])
-// 4. transactions-flushed (flushedItems: ITransactionQueueItem[])
 var Queue = (function (_super) {
     __extends(Queue, _super);
     function Queue() {
@@ -74,11 +69,26 @@ var Queue = (function (_super) {
     // flush the queue
     Queue.prototype.flush = function () {
         if (this._items.length > 0) {
-            var flushedItems = this._items;
+            var removedItems = this._items;
             this._items = [];
-            this.emit("transactions-flushed", flushedItems);
+            this.emit("transactions-removed", removedItems);
             this.emit("change");
         }
+    };
+    // remove a transaction from the queue
+    Queue.prototype.remove = function (TransactionId) {
+        if (this._items.length > 0) {
+            for (var i in this._items) {
+                var item = this._items[i];
+                if (item.Id === TransactionId) {
+                    this._items.splice(parseInt(i), 1);
+                    this.emit("transactions-removed", [item]);
+                    this.emit("change");
+                    return true;
+                }
+            }
+        }
+        return false;
     };
     Object.defineProperty(Queue.prototype, "Count", {
         get: function () {
@@ -98,13 +108,6 @@ var Queue = (function (_super) {
     return Queue;
 }(events.EventEmitter));
 ;
-// this class emits the following events
-// 1. submitted (itemJSON: ITransactionQueueItemJSON)
-// 2. change ()
-// 3. polling-transactions ()
-// 4. executing-transaction (transaction: ITransaction, TransactionId: TransactionId)
-// 5. transaction-success (transaction: ITransaction, result: any, TransactionId: TransactionId)
-// 6. transaction-error (transaction: ITransaction, err: any, TransactionId?: TransactionId)
 var FIFOTransactionProcessor = (function (_super) {
     __extends(FIFOTransactionProcessor, _super);
     function FIFOTransactionProcessor(options) {
@@ -124,10 +127,10 @@ var FIFOTransactionProcessor = (function (_super) {
             var err = { error: "timeout", error_description: "transaction timeout" };
             for (var i in timeoutItems)
                 _this.handleTransactionError(timeoutItems[i].Transaction, timeoutItems[i].CompletionCallback, err, timeoutItems[i].Id);
-        }).on("transactions-flushed", function (flushedItems) {
+        }).on("transactions-removed", function (removedItems) {
             var err = { error: "aborted", error_description: "transaction aborted" };
-            for (var i in flushedItems)
-                _this.handleTransactionError(flushedItems[i].Transaction, flushedItems[i].CompletionCallback, err, flushedItems[i].Id);
+            for (var i in removedItems)
+                _this.handleTransactionError(removedItems[i].Transaction, removedItems[i].CompletionCallback, err, removedItems[i].Id);
         });
         _this._timer = setTimeout(_this.PollingTimeoutFunction, _this._options.TransTimeoutPollingIntervalMS);
         return _this;
@@ -157,6 +160,8 @@ var FIFOTransactionProcessor = (function (_super) {
     };
     // abort all transactions currently in the queue
     FIFOTransactionProcessor.prototype.abortAll = function () { this._queue.flush(); };
+    // abort one transaction
+    FIFOTransactionProcessor.prototype.abort = function (TransactionId) { return this._queue.remove(TransactionId); };
     // call this before removing this processor reference
     FIFOTransactionProcessor.prototype.end = function () {
         this.Open = false; // close the queue
@@ -280,4 +285,5 @@ var FIFOTransactionProcessor = (function (_super) {
     };
     return FIFOTransactionProcessor;
 }(events.EventEmitter));
-exports.FIFOTransactionProcessor = FIFOTransactionProcessor;
+function get(options) { return new FIFOTransactionProcessor(options); }
+exports.get = get;
