@@ -35,7 +35,7 @@ export interface ITransactionProcessorJSON {
     Open: boolean;
     Stopped: boolean;
     QueueCount: number;
-    ExecutingTransacrion: ITransactionQueueItemJSON;
+    ExecutingTransaction: ITransactionQueueItemJSON;
 }
 
 let defaultOptions: Options = {
@@ -54,6 +54,7 @@ export interface ITransactionProcessor {
     Stopped: boolean;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
+    readonly ExecutingTransaction: ITransactionQueueItemJSON;
     toJSON: () => ITransactionProcessorJSON;
     // events
     on(event: "submitted", listener: (itemJSON: ITransactionQueueItemJSON) => void) : this;
@@ -164,7 +165,7 @@ class Queue extends events.EventEmitter implements IQueue {
 };
 
 class FIFOTransactionProcessor extends events.EventEmitter implements ITransactionProcessor {
-    private _executingTransaction: ITransactionQueueItemJSON;
+    private _executingTransaction: ITransactionQueueItem;
     private _queue: IQueue;
     private _options: Options;
     private _timer: NodeJS.Timer;
@@ -224,7 +225,7 @@ class FIFOTransactionProcessor extends events.EventEmitter implements ITransacti
         }
     }
     get Busy(): boolean {return (this._executingTransaction != null);}
-    private setExecutingTransaction(value: ITransactionQueueItemJSON) {
+    private setExecutingTransaction(value: ITransactionQueueItem) {
         if (this._executingTransaction !== value) {
             this._executingTransaction = value;
             this.emit("change");
@@ -251,7 +252,7 @@ class FIFOTransactionProcessor extends events.EventEmitter implements ITransacti
     private executeTransactionIfNecessary() {
         let item: ITransactionQueueItem = null;
         if (!this.Busy && !this.Stopped && (item = this._queue.dequeue())) {
-            this.setExecutingTransaction(Queue.itemToJSON(item));
+            this.setExecutingTransaction(item);
             this.emit("executing-transaction", item.Transaction, item.Id);
             item.Transaction.execute()
             .then((result: any) => {
@@ -297,6 +298,7 @@ class FIFOTransactionProcessor extends events.EventEmitter implements ITransacti
     }
     get Queue() : ITransactionQueueItemJSON[] {return this._queue.toJSON();}
     get Options() : Options {return _.assignIn({}, this._options);}
+    get ExecutingTransaction(): ITransactionQueueItemJSON {return (this._executingTransaction ? Queue.itemToJSON(this._executingTransaction) : null);}
     toJSON() : ITransactionProcessorJSON {
         return {
             Options: this.Options
@@ -304,7 +306,7 @@ class FIFOTransactionProcessor extends events.EventEmitter implements ITransacti
             ,Open: this.Open
             ,Stopped: this.Stopped
             ,QueueCount: this._queue.Count
-            ,ExecutingTransacrion: this._executingTransaction
+            ,ExecutingTransaction: this.ExecutingTransaction
         };
     }
 }

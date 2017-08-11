@@ -1,6 +1,6 @@
 {
   "name": "fifo-transaction-processor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "FIFO Transaction Processor",
   "main": "./js/index.js",
   "typings": "./js/index.d.ts",

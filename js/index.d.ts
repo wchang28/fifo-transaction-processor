@@ -18,7 +18,7 @@ export interface ITransactionProcessorJSON {
     Open: boolean;
     Stopped: boolean;
     QueueCount: number;
-    ExecutingTransacrion: ITransactionQueueItemJSON;
+    ExecutingTransaction: ITransactionQueueItemJSON;
 }
 export interface ITransactionProcessor {
     submit: (Transaction: ITransaction) => Promise<TransactionId>;
@@ -31,6 +31,7 @@ export interface ITransactionProcessor {
     Stopped: boolean;
     readonly Queue: ITransactionQueueItemJSON[];
     readonly Options: Options;
+    readonly ExecutingTransaction: ITransactionQueueItemJSON;
     toJSON: () => ITransactionProcessorJSON;
     on(event: "submitted", listener: (itemJSON: ITransactionQueueItemJSON) => void): this;
     on(event: "change", listener: () => void): this;

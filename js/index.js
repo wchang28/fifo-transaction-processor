@@ -212,7 +212,7 @@ var FIFOTransactionProcessor = (function (_super) {
         var _this = this;
         var item = null;
         if (!this.Busy && !this.Stopped && (item = this._queue.dequeue())) {
-            this.setExecutingTransaction(Queue.itemToJSON(item));
+            this.setExecutingTransaction(item);
             this.emit("executing-transaction", item.Transaction, item.Id);
             item.Transaction.execute()
                 .then(function (result) {
@@ -273,6 +273,11 @@ var FIFOTransactionProcessor = (function (_super) {
         enumerable: true,
         configurable: true
     });
+    Object.defineProperty(FIFOTransactionProcessor.prototype, "ExecutingTransaction", {
+        get: function () { return (this._executingTransaction ? Queue.itemToJSON(this._executingTransaction) : null); },
+        enumerable: true,
+        configurable: true
+    });
     FIFOTransactionProcessor.prototype.toJSON = function () {
         return {
             Options: this.Options,
@@ -280,7 +285,7 @@ var FIFOTransactionProcessor = (function (_super) {
             Open: this.Open,
             Stopped: this.Stopped,
             QueueCount: this._queue.Count,
-            ExecutingTransacrion: this._executingTransaction
+            ExecutingTransaction: this.ExecutingTransaction
         };
     };
     return FIFOTransactionProcessor;
